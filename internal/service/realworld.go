@@ -265,7 +265,7 @@ func (s *RealWorldService) CreateArticle(ctx context.Context, req *pb.CreateArti
 		return nil, errors.BadRequest("article not include valied data", "")
 	}
 
-	art, tags, err := s.uc.CreateArticle(ctx, &biz.Article{
+	art, err := s.uc.CreateArticle(ctx, &biz.Article{
 		AuthorID:    userID,
 		Title:       req.Article.Title,
 		Description: req.Article.Description,
@@ -282,7 +282,7 @@ func (s *RealWorldService) CreateArticle(ctx context.Context, req *pb.CreateArti
 				Title:       art.Title,
 				Description: art.Description,
 				Body:        art.Body,
-				TagList:     *tags,
+				TagList:     nil,
 				//	CreatedAt: string(art.CreatedAt),
 				//	UpdatedAt: art.UpdateAt,
 				Favorited:      false,
@@ -293,7 +293,43 @@ func (s *RealWorldService) CreateArticle(ctx context.Context, req *pb.CreateArti
 	}
 }
 func (s *RealWorldService) UpdateArticle(ctx context.Context, req *pb.UpdateArticleRequest) (*pb.SingleArticleReply, error) {
-	return &pb.SingleArticleReply{}, nil
+	//先从断言中拿到ID
+	claims, ok := kjwt.FromContext(ctx)
+	if !ok {
+		return nil, errors.Unauthorized("UNAUTHORIZED", "no jwt claims in context")
+	}
+	mapClaims := claims.(*jwt.CustomClaims)
+
+	userID := mapClaims.UserID
+	email := mapClaims.Email
+	if userID <= 0 || email == "" {
+		return nil, errors.BadRequest("jwt no valied data", "")
+	}
+
+  	art ,err := s.uc.UpdateArticle(ctx,&biz.Article{
+		AuthorID:    userID,
+		Title:       req.Article.Title,
+		Description: req.Article.Description,
+		Body:        req.Article.Body,
+		Slug:        req.Slug,
+	})
+	if err != nil{
+		return nil,err
+	}
+	return &pb.SingleArticleReply{
+		Article: &pb.SingleArticleReply_Article{
+			Slug:        art.Slug,
+			Title:       art.Title,
+			Description: art.Description,
+			Body:        art.Body,
+			TagList:     nil,
+			//	CreatedAt: string(art.CreatedAt),
+			//	UpdatedAt: art.UpdateAt,
+			Favorited:      false,
+			FavoritesCount: 0,
+			//	Author: userID,
+		},
+	}, nil
 }
 func (s *RealWorldService) DeleteArticle(ctx context.Context, req *pb.DeleteArticleRequest) (*emptypb.Empty, error) {
 	return &emptypb.Empty{}, nil

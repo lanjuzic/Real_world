@@ -2,6 +2,8 @@ package biz
 
 import (
 	"context"
+	"fmt"
+
 	//"fmt"
 
 	v1 "kratos-realworld/api/realworld/v1"
@@ -30,23 +32,26 @@ type RealWorld struct {
 	Image     string    `gorm:"column:image;" json:"image"`
 }
 
-type Article struct{
-	ID int64  `gorm:"primaryKey;autoIncrement" json:"id"`
-	Slug string `gorm:"size:255;unqueIndex;not null" json:"slug"`
-	Title string `gorm:"size:255;not null" json:"title"`
- 	Description string `gorm:"type:text" json:"description"`
- 	Body  string  `gorm:"type:text;not null" json:"body"`
-	AuthorID int64 `gorm:"not null" json:"author_id"`
-	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"`
-	UpdateAt time.Time  `gorm:"autoUpdateTIme" json:"update_at"`
+type Article struct {
+	ID          int64     `gorm:"primaryKey;autoIncrement" json:"id"`
+	Slug        string    `gorm:"size:255;unqueIndex;not null" json:"slug"`
+	Title       string    `gorm:"size:255;not null" json:"title"`
+	Description string    `gorm:"type:text" json:"description"`
+	Body        string    `gorm:"type:text;not null" json:"body"`
+	AuthorID    int64     `gorm:"not null" json:"author_id"`
+	CreatedAt   time.Time `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt   time.Time `gorm:"autoUpdateTIme" json:"updated_at"`
 }
 
-type Tags struct{
-	ID int64 `gorm:"primaryKey;autoIncrement" json:"id"`
+type Tags struct {
+	ID   int64  `gorm:"primaryKey;autoIncrement" json:"id"`
 	Name string `gorm:"not null" json:"name"`
 }
 
-func(Article) TableName()string{
+func (Tags) TableName() string {
+	return "tags"
+}
+func (Article) TableName() string {
 	return "articles"
 }
 
@@ -68,6 +73,11 @@ type RealWorldRepo interface {
 	FindAFollowB(context.Context, int64, int64) (bool, error)
 	AFollowB(context.Context, int64, int64) error
 	AUnFollowB(context.Context, int64, int64) error
+	CreateArticle(context.Context, *Article) (*Article, error)
+	CreateTag(context.Context, *Tags) error
+	CreateTags(context.Context, *[]Tags) error
+	GetArticleBySlug(context.Context, string) (*Article, error)
+	UpdateArticle(context.Context, *Article) (*Article, error)
 	//ListByHello(context.Context, string) ([]*RealWorld, error)
 	//ListAll(context.Context) ([]*RealWorld, error)
 }
@@ -230,9 +240,37 @@ func (uc *RealWorldUsecase) UnFollowUser(ctx context.Context, myid int64, userna
 	}
 }
 
-func (uc *RealWorldUsecase) CreateArticle(ctx context.Context, art *Article, tags *[]string)(*Article,*[]string ,error){
+func (uc *RealWorldUsecase) CreateArticle(ctx context.Context, art *Article, tags *[]string) (*Article, error) {
+	var t []Tags
+	for i := 0; i < len(*tags); i++ {
+		t = append(t, Tags{
+			ID:   art.ID,
+			Name: (*tags)[i],
+		})
+	}
+	if err := uc.repo.CreateTags(ctx, &t); err != nil { //创建标记 cu
+		return nil, err
+	}
+	return uc.repo.CreateArticle(ctx, art) //创建文章
+}
 
-	return nil,nil,nil
+func (uc *RealWorldUsecase) UpdateArticle(ctx context.Context, art *Article) (*Article, error) {
+	//查找文章是否存在，文章和用户ID是否匹配
+	repart, err := uc.repo.GetArticleBySlug(ctx, art.Slug)
+	if err != nil {
+		return nil, err
+	}
+	//return nil, fmt.Errorf("ceshi")
+	if repart.AuthorID != art.AuthorID {
+		return nil, fmt.Errorf("you are not the articls' author")
+	}
+	art.ID = repart.ID
+	upart, err := uc.repo.UpdateArticle(ctx, art)
+	if err != nil {
+		return nil, err
+	}
+	//现查找用户是否存在
+	return upart, nil
 }
 
 // 查找用户是否已经存在 repo层

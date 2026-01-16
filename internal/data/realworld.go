@@ -240,3 +240,83 @@ func (r *RealWorldRepo) SetUserOnline(ctx context.Context, id int64) error {
 	}
 	return nil
 }
+
+func (r *RealWorldRepo) CreateArticle(ctx context.Context, art *biz.Article) (*biz.Article, error) {
+	res := r.data.DB.WithContext(ctx).Create(art)
+	if res.Error != nil {
+		r.log.Errorf("CreateTag error: %v", res.Error)
+		return nil, res.Error
+	}
+	return art, nil //data层还未实现
+}
+func (r *RealWorldRepo) CreateTag(ctx context.Context, tag *biz.Tags) error {
+	// 使用 FirstOrCreate 检查标签是否已经存在
+	res := r.data.DB.WithContext(ctx).FirstOrCreate(tag, biz.Tags{Name: tag.Name})
+
+	// 如果发生其他错误，则返回错误
+	if res.Error != nil {
+		r.log.Errorf("CreateTag error: %v", res.Error)
+		return res.Error
+	}
+
+	// 如果没有错误，则说明标签已经存在或已经成功创建
+	return nil
+}
+
+func (r *RealWorldRepo) CreateTags(ctx context.Context, tags *[]biz.Tags) error {
+	//变量tags，查看是否已经出现
+	var end_err error
+	for i := 0; i < len(*tags); i++ {
+		if err := r.CreateTag(ctx, &(*tags)[i]); err != nil {
+			end_err = err
+		}
+	}
+
+	return end_err //data层还未实现
+}
+
+func (r *RealWorldRepo) GetArticleBySlug(ctx context.Context, slug string) (*biz.Article, error) {
+	var art biz.Article
+	res := r.data.DB.WithContext(ctx).Where("slug = ?", slug).First(&art)
+	if res.Error != nil {
+		return nil, res.Error
+	}
+	return &art, nil
+}
+func (r *RealWorldRepo) UpdateArticle(ctx context.Context, up *biz.Article) (*biz.Article, error) {
+	upData := map[string]interface{}{}
+	if up.ID == 0 {
+		return nil, fmt.Errorf("cant found the atrticle id")
+	}
+	if up.Title != "" {
+		upData["title"] = up.Title
+	}
+	if up.Body != "" {
+		upData["body"] = up.Body
+	}
+	if up.Description != "" {
+		upData["description"] = up.Description
+	}
+
+	if len(upData) == 0 {
+		return nil, fmt.Errorf("no data need update")
+	}
+
+	//return nil, fmt.Errorf("ceshi")
+	res := r.data.DB.WithContext(ctx).Model(&biz.Article{}).Where("id = ?", up.ID).Updates(upData)
+
+	if res.Error != nil {
+		return nil, res.Error
+	}
+
+	if res.RowsAffected == 0 {
+		return nil, errors.New("no article updated")
+	}
+	// 重新查询更新后的文章
+	var updatedArticle biz.Article
+	if err := r.data.DB.WithContext(ctx).First(&updatedArticle, up.ID).Error; err != nil {
+		return nil, fmt.Errorf("failed to fetch updated article: %v", err)
+	}
+
+	return &updatedArticle, nil
+}
